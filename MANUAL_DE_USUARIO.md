@@ -1,59 +1,70 @@
 # Manual de Usuario - Base de Datos de Proyectos CES (Chile)
 
 ## Introducción
-Esta herramienta permite extraer (scrapear) automáticamente información de proyectos desde el sitio web de Certificación Edificio Sustentable (CES). El sistema descarga los datos, los procesa y genera una base de datos consolidada en formato CSV.
+Esta herramienta extrae automáticamente la información pública de los proyectos del sitio de Certificación Edificio
+Sustentable (CES), la procesa y genera una base de datos consolidada en CSV.
 
 ## Requisitos Previos
-1.  **Python 3.8+**: Asegúrate de tener Python instalado.
-2.  **Conexión a Internet**: Necesaria para acceder al sitio web de CES.
+1.  **Python 3.12** (recomendado en un entorno aislado creado con `uv`).
+2.  **Conexión a Internet** para acceder al sitio de CES.
 
 ## Instalación
 
-1.  Clonar el repositorio o descargar el código.
-2.  Instalar las dependencias:
-    ```bash
-    pip install -r requirements.txt
-    ```
+```bash
+uv venv --python 3.12
+uv pip install -r requirements.txt
+```
 
 ## Uso
 
-### 1. Actualizar la Base de Datos de Proyectos
-Para descargar la información más reciente de todos los proyectos y generar un archivo consolidado:
+### 1. Actualizar la base de datos de proyectos
 
 ```bash
-python scrape_projects.py
+.venv/bin/python scrape_projects.py
 ```
 
-**¿Qué hace este comando?**
-1.  Recorre todas las categorías de certificación (`en-proceso`, `pre-certificacion`, etc.).
-2.  Descarga los detalles de cada proyecto usando 5 workers concurrentes para mayor velocidad.
-3.  Guarda archivos temporales en `data/raw/` con la fecha de ejecución.
-4.  Genera automáticamente un archivo consolidado final llamado `[CES]_Projects_Full_List-YYYY_MM_DD.csv`.
-5.  Elimina los archivos intermedios automáticamente.
+**Qué hace este comando:**
+1.  Recorre las cuatro categorías: `en-proceso`, `pre-certificacion`, `certificacion` y `sello-plus`.
+2.  Descarga la ficha de cada proyecto con 5 workers concurrentes.
+3.  Guarda archivos temporales por categoría en `data/raw/`.
+4.  Genera el consolidado `[CES]_Projects_Full_List-YYYY_MM_DD.csv`, con una fila por proyecto y estado.
+5.  Borra los archivos intermedios.
 
-**Tiempo estimado:** 2-3 minutos para ~500 proyectos (gracias al procesamiento paralelo).
+**Tiempo estimado:** unos minutos para ~730 proyectos (noviembre de 2026).
 
-### 2. Actualizar Registro de Asesores
-Para descargar la lista oficial de asesores acreditados desde el sitio de CES y procesarla:
+### 2. Actualizar el registro de asesores
 
 ```bash
-python scrape_assessors.py
+.venv/bin/python scrape_assessors.py
 ```
 
-**¿Qué hace este comando?**
-1.  Se conecta al sitio web de CES y descarga el archivo Excel más reciente de asesores.
-2.  Limpia y estandariza los formatos de fecha (español a ISO).
+**Qué hace este comando:**
+1.  Descarga el Excel oficial de asesores acreditados
+    (`https://storage.certificacionsustentable.cl/static/asesores_acreditados.xlsx`).
+2.  Estandariza las fechas (de español a ISO).
 3.  Filtra las columnas relevantes (RUT, email, región, etc.).
-4.  Genera el archivo `data/raw/[CES]_Registro_AsesoresCES_Full_List-YYYY_MM_DD.csv`.
+4.  Genera `data/raw/[CES]_Registro_AsesoresCES_Full_List-YYYY_MM_DD.csv`.
+
+> El registro de asesores contiene datos personales publicados por CES (RUT, correo, teléfono). Úsalo solo para
+> fines compatibles con su publicación y no lo subas al repositorio: `data/` está en `.gitignore`.
+
+## Estructura de datos del consolidado de proyectos
+
+| Columna | Contenido |
+|---|---|
+| `project_name` | Nombre del proyecto |
+| `status` | Categoría en el sitio: `en-proceso`, `pre-certificacion`, `certificacion` o `sello-plus` |
+| `project_url` | URL de la ficha del proyecto (clave para eliminar duplicados) |
+| `project_image_url`, `project_entry_date` | Imagen y fecha de ingreso |
+| `ahorro_energia_pct`, `reduccion_co2_pct`, `reduccion_agua_pct`, `reduccion_residuos_pct` | Indicadores de desempeño en %; vacío si la ficha muestra "–%" (no se postuló a ese requisito) |
+| `mandante`, `arquitecto`, `unidad_tecnica` | Participantes del proyecto |
+| `asesor`, `entidad_evaluadora` | Asesor CES y entidad evaluadora |
+| `asesor_precertificacion`, `entidad_evaluadora_precertificacion`, `asesor_certificacion`, `entidad_evaluadora_certificacion` | Participantes por etapa, cuando la ficha los separa |
+| `region`, `comuna` | Ubicación |
+| `version_certificacion`, `nivel_obtenido`, `fecha_logro_obtenido`, `puntaje_obtenido` | Resultado de la certificación |
 
 ## Solución de Problemas
 
--   **Error de conexión**: Si el script falla por problemas de red, reintentará automáticamente. Si persiste, verifica tu conexión.
--   **Interrupción**: Si detienes el script (`Ctrl+C`), puedes volver a ejecutarlo. Los archivos ya descargados no se reanudan, pero el proceso comenzará de nuevo.
-
-## Estructura de Datos
-El archivo final consolidado contiene columnas como:
--   `project_name`: Nombre del proyecto.
--   `status`: Estado de certificación.
--   `mandante`, `arquitecto`, `asesor`: Información de los participantes.
--   `puntaje_obtenido`: Puntaje final de la certificación.
+-   **Error de conexión**: el script reintenta automáticamente; si persiste, revisa la conexión.
+-   **Interrupción** (`Ctrl+C`): vuelve a ejecutar el script; el proceso parte de nuevo.
+-   **Columnas vacías**: si el sitio cambia su HTML, los selectores de `scrape_projects.py` deben actualizarse.

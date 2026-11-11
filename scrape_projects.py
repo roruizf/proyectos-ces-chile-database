@@ -25,6 +25,23 @@ logger = logging.getLogger(__name__)
 HOME_URL = 'https://www.certificacionsustentable.cl/'
 DATA_PATH = Path('./data/raw/')
 
+# Indicator labels on each project page -> output columns (percent values)
+INDICATOR_COLUMNS = {
+    'ahorro de energia': 'ahorro_energia_pct',
+    'reduccion de emisiones co2': 'reduccion_co2_pct',
+    'reduccion de consumo de agua': 'reduccion_agua_pct',
+    'reduccion de residuos': 'reduccion_residuos_pct',
+}
+
+
+def parse_indicator(value: str) -> Optional[float]:
+    """Convert an indicator such as '64,8%' to 64.8; '–%' (not applied for) becomes None."""
+    number = value.replace('%', '').replace(',', '.').strip()
+    try:
+        return float(number)
+    except ValueError:
+        return None
+
 
 def single_page_projects(response) -> pd.DataFrame:
     """
@@ -137,9 +154,18 @@ def scrape_single_project(url: str, index: int) -> Optional[Dict]:
 
     project_dict = {
         'project_name': project_name,
+        'project_url': url,
         'project_image_url': project_image_url,
         'project_entry_date': project_entry_date
     }
+
+    # Extract project indicators ("–%" means the requirement was not applied for)
+    for cell in parsed.xpath('//div[contains(@class, "project-indicator-cell")]'):
+        label = ' '.join(t.strip() for t in cell.xpath('./p[@class="small"]//text()') if t.strip())
+        column = INDICATOR_COLUMNS.get(unidecode(label).lower())
+        if column:
+            value = ''.join(cell.xpath('./p/b//text()')).strip()
+            project_dict[column] = parse_indicator(value)
 
     # Extract project details
     project_details_keys = parsed.xpath('//div[@class="entry-content"]//li/b/text()')
@@ -230,7 +256,8 @@ def get_project_page_data(state_df: pd.DataFrame, state: str, max_workers: int =
     }
 
     main_df = main_df.rename(columns=column_name_dict)
-    main_df.drop_duplicates(inplace=True)
+    # One row per project page (image URLs can differ between duplicated listing entries)
+    main_df.drop_duplicates(subset=['project_url'], inplace=True)
     main_df.reset_index(drop=True, inplace=True)
     
     # Save to CSV
@@ -278,7 +305,7 @@ def all_pages_projects(state: str) -> None:
 
     # Concatenate and save summary
     main_df = pd.concat(page_dfs, ignore_index=True)
-    main_df.drop_duplicates(inplace=True)
+    main_df.drop_duplicates(subset=['url'], inplace=True)
     main_df.reset_index(drop=True, inplace=True)
     
     DATA_PATH.mkdir(parents=True, exist_ok=True)
@@ -328,6 +355,7 @@ def consolidate_csvs() -> None:
         logger.warning("Resulting DataFrame is empty.")
         return
 
+    main_df.drop_duplicates(subset=['status', 'project_url'], inplace=True)
     main_df = main_df.where(pd.notnull(main_df), None)
     main_df.reset_index(drop=True, inplace=True)
 

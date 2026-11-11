@@ -5,4 +5,6 @@
 *.csv
 *.pbix
 # notebooks/
-# utils/
+# utils/__pycache__/
+*.pyc
+.venv/
